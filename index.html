@@ -244,7 +244,6 @@
       <button class="filter-btn" onclick="setFilter('red',this)">🔴 Urgents</button>
       <button class="filter-btn" onclick="setFilter('yellow',this)">🟡 Bientôt</button>
       <button class="filter-btn" onclick="setFilter('green',this)">🟢 OK</button>
-      <button class="filter-btn" onclick="setFilter('archive',this)">📦 Archives</button>
     </div>
     <button class="btn-add" onclick="openModal()">＋ Ajouter produit</button>
   </div>
@@ -382,6 +381,7 @@ function api(params) {
 }
 
 // ── Chargement initial ──
+let syncRetries = 0;
 async function fullSync() {
   setSyncStatus('loading', 'Synchronisation…');
   try {
@@ -399,17 +399,25 @@ async function fullSync() {
         eventId: ev.eventId, archived: false,
       }));
       nextId = products.length + 1;
+      syncRetries = 0;
       const total = products.length;
       setSyncStatus('connected', `${total} suivi${total > 1 ? 's' : ''}`);
-      toast(`📅 ${total} produit${total > 1 ? 's' : ''} chargé${total > 1 ? 's' : ''} depuis Google Calendar`);
+      toast(`📅 ${total} produit${total > 1 ? 's' : ''} chargé${total > 1 ? 's' : ''}`);
     } else {
       setSyncStatus('error', 'Erreur Calendar');
       toast('⚠ Erreur Calendar : ' + (calData.error || ''), true);
     }
     render();
   } catch(e) {
-    setSyncStatus('error', 'Erreur');
-    toast('⚠ Erreur : ' + e.message, true);
+    // Retry automatique jusqu'à 3 fois (cold start Google)
+    if (syncRetries < 3) {
+      syncRetries++;
+      setSyncStatus('loading', `Tentative ${syncRetries}/3…`);
+      setTimeout(fullSync, 3000);
+    } else {
+      setSyncStatus('error', 'Hors ligne');
+      toast('⚠ Connexion impossible — clique sur Sync pour réessayer', true);
+    }
   }
 }
 
@@ -513,24 +521,15 @@ async function addProduct() {
   }
 }
 
-// ── Actions : archiver / supprimer ──
-async function archiveProduct(id) {
+// ── Vérifié = supprime l'article et l'événement Calendar ──
+async function verifyProduct(id) {
   const p = products.find(x => x.id === id);
   if (!p) return;
-  // Supprime l'événement Calendar si possible
   if (p.eventId) {
     try { await api({ action: 'deleteEvent', eventId: p.eventId }); } catch(e) {}
   }
-  p.archived = true;
-  toast(`✓ "${p.name}" archivé et retiré du Calendar`);
-  render();
-}
-
-function clearAllArchives() {
-  const count = products.filter(p => p.archived).length;
-  if (!count) return;
-  products = products.filter(p => !p.archived);
-  toast(`🗑 ${count} archive${count > 1 ? 's' : ''} supprimée${count > 1 ? 's' : ''}`);
+  products = products.filter(x => x.id !== id);
+  toast(`✓ "${p.name}" vérifié et retiré`);
   render();
 }
   const p = products.find(x => x.id === id);
@@ -669,30 +668,6 @@ function renderStats() {
 function renderProducts() {
   const list = document.getElementById('product-list');
 
-  if (currentFilter === 'archive') {
-    let archived = products.filter(p => p.archived);
-
-    // Dédoublonnage : garde le plus récent par nom+marque
-    const seen = {};
-    archived = archived.filter(p => {
-      const key = `${p.brand}|${p.name}`;
-      if (!seen[key] || p.dlc > seen[key]) { seen[key] = p.dlc; return true; }
-      return false;
-    });
-    archived.sort((a, b) => b.dlc.localeCompare(a.dlc));
-
-    if (!archived.length) { list.innerHTML = emptyState('Aucune archive','Les produits retirés apparaîtront ici'); return; }
-    list.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div class="section-title" style="margin:0;flex:1">Archives (${archived.length})</div>
-        <button onclick="clearAllArchives()" style="padding:6px 14px;border-radius:6px;border:1px solid var(--red);background:transparent;color:var(--red);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;cursor:pointer">
-          🗑 Tout vider
-        </button>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:6px">${archived.map(archiveCard).join('')}</div>`;
-    return;
-  }
-
   let active = products.filter(p => !p.archived).sort((a,b) => daysUntil(a.dlc) - daysUntil(b.dlc));
   if (currentFilter !== 'all') active = active.filter(p => statusClass(daysUntil(p.dlc)) === currentFilter);
 
@@ -722,7 +697,7 @@ const productCard = p => {
     <div class="card-date">DLC : <span>${fmtDate(p.dlc)}</span></div>
     ${p.barcode ? `<div class="card-date">Code : <span>${p.barcode}</span></div>` : ''}
     <div class="card-actions">
-      <button class="action-btn archive" onclick="archiveProduct(${p.id})">✓ Archiver</button>
+      <button class="action-btn archive" onclick="verifyProduct(${p.id})">✓ Vérifié</button>
       <button class="action-btn edit"    onclick="openEditDate(${p.id})">📅 Changer date</button>
     </div>
   </div>`;
@@ -751,7 +726,8 @@ function toast(msg, warn=false) {
 
 // ── Init ──
 render();
-fullSync();
+// Petit délai pour laisser le temps à la page de charger complètement
+setTimeout(fullSync, 500);
 </script>
 </body>
 </html>
