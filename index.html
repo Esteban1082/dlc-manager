@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DLC Manager – Rob The Market</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0f0f0d;
+    --surface:   #1a1a16;
+    --border:    #2e2e28;
+    --text:      #f0ede4;
+    --muted:     #7a7a6e;
+    --red:       #ff4040;
+    --red-bg:    rgba(255,64,64,.10);
+    --yellow:    #f5c842;
+    --yellow-bg: rgba(245,200,66,.10);
+    --green:     #4cdb8a;
+    --green-bg:  rgba(76,219,138,.10);
+    --grey:      #6e6e64;
+    --grey-bg:   rgba(110,110,100,.10);
+    --amber:     #e8a045;
+  }
+
+  body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; overflow-x:hidden; }
+
+  header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:20px 32px; border-bottom:1px solid var(--border);
+    position:sticky; top:0; background:var(--bg); z-index:100;
+  }
+  .logo { display:flex; flex-direction:column; gap:2px; }
+  .logo-title { font-family:'Fraunces',serif; font-weight:900; font-size:22px; color:var(--amber); }
+  .logo-sub { font-size:10px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; }
+  .header-right { display:flex; align-items:center; gap:16px; }
+  .date-display { font-size:11px; color:var(--muted); letter-spacing:1px; text-align:right; }
+  #clock { color:var(--text); font-size:18px; display:block; }
+
+  .sync-status {
+    display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted);
+    padding:5px 12px; border-radius:100px; border:1px solid var(--border);
+    cursor:pointer; transition:all .2s;
+  }
+  .sync-status:hover { border-color:var(--amber); color:var(--text); }
+  .sync-dot { width:7px; height:7px; border-radius:50%; background:var(--grey); transition:background .3s; }
+  .sync-dot.connected { background:var(--green); box-shadow:0 0 6px var(--green); }
+  .sync-dot.loading   { background:var(--yellow); animation:blink .8s ease-in-out infinite; }
+  .sync-dot.error     { background:var(--red); }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  .legend { display:flex; gap:8px; padding:12px 32px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  .legend-pill { display:flex; align-items:center; gap:6px; padding:4px 12px; border-radius:100px; font-size:11px; letter-spacing:1px; text-transform:uppercase; }
+  .legend-dot { width:8px; height:8px; border-radius:50%; }
+
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); border-bottom:1px solid var(--border); }
+  .stat { background:var(--surface); padding:16px 24px; display:flex; flex-direction:column; gap:4px; transition:background .2s; }
+  .stat:hover { background:#1f1f1a; }
+  .stat-count { font-family:'Fraunces',serif; font-size:32px; font-weight:900; line-height:1; }
+  .stat-label { font-size:10px; color:var(--muted); letter-spacing:1.5px; text-transform:uppercase; }
+
+  .main { padding:24px 32px; max-width:1400px; margin:0 auto; }
+  .toolbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; gap:12px; flex-wrap:wrap; }
+  .toolbar-left { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+
+  .filter-btn {
+    padding:7px 16px; border-radius:6px; border:1px solid var(--border);
+    background:transparent; color:var(--muted); font-family:'DM Mono',monospace;
+    font-size:11px; letter-spacing:1px; text-transform:uppercase; cursor:pointer; transition:all .15s;
+  }
+  .filter-btn:hover { border-color:var(--amber); color:var(--text); }
+  .filter-btn.active { background:var(--amber); color:#000; border-color:var(--amber); font-weight:500; }
+
+  .btn-add {
+    padding:10px 20px; background:var(--amber); color:#000; border:none; border-radius:8px;
+    font-family:'Fraunces',serif; font-size:15px; font-weight:600;
+    cursor:pointer; transition:all .15s; display:flex; align-items:center; gap:8px;
+  }
+  .btn-add:hover { background:#f0b050; transform:translateY(-1px); }
+
+  .section-title {
+    font-size:11px; color:var(--muted); letter-spacing:2px; text-transform:uppercase;
+    margin-bottom:10px; margin-top:24px; display:flex; align-items:center; gap:8px;
+  }
+  .section-title::after { content:''; flex:1; height:1px; background:var(--border); }
+
+  .products-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:10px; }
+
+  .product-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:16px; display:flex; flex-direction:column; gap:10px;
+    transition:all .2s; position:relative; overflow:hidden; animation:fadeIn .3s ease;
+  }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  .product-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; border-radius:10px 0 0 10px; }
+  .product-card.red    { border-color:rgba(255,64,64,.3);   background:var(--red-bg); }
+  .product-card.red::before    { background:var(--red); }
+  .product-card.yellow { border-color:rgba(245,200,66,.3);  background:var(--yellow-bg); }
+  .product-card.yellow::before { background:var(--yellow); }
+  .product-card.green  { border-color:rgba(76,219,138,.25); background:var(--green-bg); }
+  .product-card.green::before  { background:var(--green); }
+  .product-card.grey::before   { background:var(--grey); }
+  .product-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.3); }
+
+  .card-top { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .card-brand { font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); }
+  .status-badge { padding:3px 8px; border-radius:4px; font-size:10px; font-weight:500; white-space:nowrap; }
+  .red .status-badge    { background:rgba(255,64,64,.2);   color:var(--red); }
+  .yellow .status-badge { background:rgba(245,200,66,.2);  color:var(--yellow); }
+  .green .status-badge  { background:rgba(76,219,138,.2);  color:var(--green); }
+  .grey .status-badge   { background:rgba(110,110,100,.2); color:var(--grey); }
+  .card-name { font-family:'Fraunces',serif; font-size:17px; font-weight:600; line-height:1.2; }
+  .card-date { font-size:12px; color:var(--muted); }
+  .card-date span { color:var(--text); }
+  .card-actions { display:flex; gap:6px; margin-top:4px; }
+  .action-btn {
+    flex:1; padding:7px; border-radius:6px; border:1px solid var(--border);
+    background:transparent; color:var(--muted); font-family:'DM Mono',monospace;
+    font-size:10px; letter-spacing:.5px; cursor:pointer; transition:all .15s; text-transform:uppercase;
+  }
+  .action-btn.archive:hover { color:var(--green); border-color:var(--green); }
+  .action-btn.delete:hover  { color:var(--red);   border-color:var(--red); }
+
+  /* Modal */
+  .modal-overlay {
+    position:fixed; inset:0; background:rgba(0,0,0,.7); backdrop-filter:blur(4px);
+    z-index:200; display:flex; align-items:center; justify-content:center; padding:20px;
+    animation:fadeOverlay .2s ease;
+  }
+  @keyframes fadeOverlay { from{opacity:0} to{opacity:1} }
+  .modal {
+    background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    padding:32px; width:100%; max-width:480px; animation:slideUp .2s ease;
+  }
+  @keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+  .modal-title { font-family:'Fraunces',serif; font-size:24px; font-weight:900; margin-bottom:24px; color:var(--amber); }
+
+  .form-group { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+  .form-label { font-size:10px; color:var(--muted); letter-spacing:1.5px; text-transform:uppercase; }
+  .form-input {
+    background:var(--bg); border:1px solid var(--border); border-radius:8px;
+    padding:10px 14px; color:var(--text); font-family:'DM Mono',monospace;
+    font-size:14px; outline:none; transition:border-color .15s;
+  }
+  .form-input:focus { border-color:var(--amber); }
+
+  .barcode-row { display:flex; gap:8px; }
+  .barcode-row .form-input { flex:1; }
+  .btn-scan {
+    padding:10px 14px; background:var(--surface); border:1px solid var(--border);
+    border-radius:8px; color:var(--muted); font-size:18px; cursor:pointer; transition:all .15s;
+  }
+  .btn-scan:hover { border-color:var(--amber); color:var(--amber); }
+
+  .lookup-result {
+    padding:10px 14px; border-radius:8px; font-size:12px;
+    border:1px solid var(--border); display:none;
+  }
+  .lookup-result.found   { border-color:rgba(76,219,138,.4); background:var(--green-bg); color:var(--green); }
+  .lookup-result.notfound{ border-color:rgba(255,64,64,.3);  background:var(--red-bg);   color:var(--red); }
+  .lookup-result.searching{ border-color:rgba(245,200,66,.3); background:var(--yellow-bg); color:var(--yellow); }
+
+  .modal-actions { display:flex; gap:10px; margin-top:24px; }
+  .btn-confirm {
+    flex:1; padding:12px; background:var(--amber); color:#000; border:none; border-radius:8px;
+    font-family:'Fraunces',serif; font-size:16px; font-weight:700; cursor:pointer; transition:all .15s;
+  }
+  .btn-confirm:hover { background:#f0b050; }
+  .btn-cancel {
+    padding:12px 20px; background:transparent; color:var(--muted); border:1px solid var(--border);
+    border-radius:8px; font-family:'DM Mono',monospace; font-size:13px; cursor:pointer; transition:all .15s;
+  }
+  .btn-cancel:hover { color:var(--text); border-color:var(--text); }
+
+  .archive-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:12px 16px; display:flex; align-items:center; justify-content:space-between;
+    gap:12px; opacity:.5; transition:opacity .2s;
+  }
+  .archive-card:hover { opacity:.8; }
+  .archive-name { font-family:'Fraunces',serif; font-size:15px; font-weight:600; text-decoration:line-through; color:var(--muted); }
+  .archive-meta { font-size:11px; color:var(--grey); }
+  .archive-tag  { font-size:10px; padding:3px 8px; border-radius:4px; background:var(--grey-bg); color:var(--grey); }
+
+  .empty-state { text-align:center; padding:60px 20px; color:var(--muted); }
+  .empty-state-icon { font-size:40px; margin-bottom:12px; }
+  .empty-state-text { font-family:'Fraunces',serif; font-size:18px; margin-bottom:6px; }
+  .empty-state-sub  { font-size:12px; }
+
+  .toast-container { position:fixed; bottom:24px; right:24px; z-index:300; display:flex; flex-direction:column; gap:8px; }
+  .toast {
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:12px 18px; font-size:13px; min-width:240px;
+    animation:slideToast .3s ease; box-shadow:0 8px 24px rgba(0,0,0,.4);
+  }
+  @keyframes slideToast    { from{transform:translateX(40px);opacity:0} to{transform:translateX(0);opacity:1} }
+  .toast.out { animation:slideToastOut .3s ease forwards; }
+  @keyframes slideToastOut { to{transform:translateX(40px);opacity:0} }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.7} }
+  .product-card.red { animation:fadeIn .3s ease, pulse 2s ease-in-out infinite; }
+
+  @media (max-width:600px) {
+    header,.main { padding:14px 16px; }
+    .legend { padding:10px 16px; }
+    .stats  { grid-template-columns:repeat(2,1fr); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="logo-title">DLC Manager</span>
+    <span class="logo-sub">Rob The Market · Pâtisserie</span>
+  </div>
+  <div class="header-right">
+    <div class="sync-status" onclick="fullSync()" title="Cliquer pour synchroniser">
+      <div class="sync-dot" id="sync-dot"></div>
+      <span id="sync-label">Sync Sheets</span>
+    </div>
+    <div class="date-display">
+      <span id="clock">--:--</span>
+      <span id="date-str"></span>
+    </div>
+  </div>
+</header>
+
+<div class="legend">
+  <div class="legend-pill" style="background:var(--red-bg);color:var(--red)"><div class="legend-dot" style="background:var(--red)"></div> Périmé aujourd'hui</div>
+  <div class="legend-pill" style="background:var(--yellow-bg);color:var(--yellow)"><div class="legend-dot" style="background:var(--yellow)"></div> 1–3 jours</div>
+  <div class="legend-pill" style="background:var(--green-bg);color:var(--green)"><div class="legend-dot" style="background:var(--green)"></div> 4–10 jours</div>
+  <div class="legend-pill" style="background:var(--grey-bg);color:var(--grey)"><div class="legend-dot" style="background:var(--grey)"></div> +10 jours</div>
+</div>
+
+<div class="stats" id="stats-bar"></div>
+
+<div class="main">
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <button class="filter-btn active" onclick="setFilter('all',this)">Tous</button>
+      <button class="filter-btn" onclick="setFilter('red',this)">🔴 Urgents</button>
+      <button class="filter-btn" onclick="setFilter('yellow',this)">🟡 Bientôt</button>
+      <button class="filter-btn" onclick="setFilter('green',this)">🟢 OK</button>
+      <button class="filter-btn" onclick="setFilter('archive',this)">📦 Archives</button>
+    </div>
+    <button class="btn-add" onclick="openModal()">＋ Ajouter produit</button>
+  </div>
+  <div id="product-list"></div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal" style="display:none" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <div class="modal-title">Nouveau produit</div>
+
+    <div class="form-group">
+      <label class="form-label">Recherche produit (nom ou code-barres)</label>
+      <div class="barcode-row">
+        <input class="form-input" id="f-search" type="text" placeholder="Tape un nom ou scanne un code…" oninput="onSearchInput()" autocomplete="off">
+        <button class="btn-scan" onclick="triggerSearch()" title="Rechercher dans Sheets">🔍</button>
+      </div>
+      <div class="lookup-result" id="lookup-result"></div>
+      <div id="suggestions" style="display:none;margin-top:4px;border:1px solid var(--border);border-radius:8px;overflow:hidden;"></div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Code-barres</label>
+      <input class="form-input" id="f-barcode" type="text" placeholder="(rempli automatiquement)">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Marque / Pâtissier</label>
+      <input class="form-input" id="f-brand" type="text" placeholder="Ex: Pierre Marcolini…">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Nom de l'article</label>
+      <input class="form-input" id="f-name" type="text" placeholder="Ex: Tarte citron meringuée…">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Date de péremption (DLC)</label>
+      <input class="form-input" id="f-date" type="date">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Annuler</button>
+      <button class="btn-confirm" onclick="addProduct()">Ajouter →</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbz425iBOjYC8raof6W44y0IcJlCZHzjOrMzzjw0ju8uXFCKvFSl-xmYi9tZvOoSvP0aZg/exec";
+
+const today = new Date(); today.setHours(0,0,0,0);
+let products      = [];
+let sheetProducts = [];
+let nextId        = 1;
+let currentFilter = 'all';
+
+// ── Helpers ──
+const daysUntil  = dateStr => { const d = new Date(dateStr); d.setHours(0,0,0,0); return Math.round((d - today) / 86400000); };
+const statusClass = days => days <= 0 ? 'red' : days <= 3 ? 'yellow' : days <= 10 ? 'green' : 'grey';
+const statusLabel = days => days < 0 ? `Périmé il y a ${Math.abs(days)}j` : days === 0 ? 'Périmé aujourd\'hui !' : days === 1 ? 'Demain !' : `Dans ${days} jours`;
+const fmtDate    = dateStr => new Date(dateStr + 'T00:00:00').toLocaleDateString('fr-BE', { day:'2-digit', month:'short', year:'numeric' });
+
+// ── Clock ──
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('fr-BE', { hour:'2-digit', minute:'2-digit' });
+  document.getElementById('date-str').textContent = now.toLocaleDateString('fr-BE', { weekday:'long', day:'numeric', month:'long' });
+}
+updateClock(); setInterval(updateClock, 1000);
+
+// ── Sync status UI ──
+function setSyncStatus(state, label) {
+  document.getElementById('sync-dot').className = 'sync-dot ' + state;
+  document.getElementById('sync-label').textContent = label;
+}
+
+// ── API helper JSONP (seule méthode compatible avec Google Apps Script) ──
+function api(params) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'cb_' + Date.now();
+    const script = document.createElement('script');
+    const timer  = setTimeout(() => {
+      cleanup(); reject(new Error('Timeout'));
+    }, 20000);
+
+    window[cbName] = (data) => { cleanup(); resolve(data); };
+
+    function cleanup() {
+      clearTimeout(timer);
+      delete window[cbName];
+      script.remove();
+    }
+
+    script.onerror = () => { cleanup(); reject(new Error('Erreur réseau')); };
+    const p = new URLSearchParams({ ...params, callback: cbName });
+    script.src = API_URL + '?' + p.toString();
+    document.head.appendChild(script);
+  });
+}
+
+// ── Chargement initial ──
+async function fullSync() {
+  setSyncStatus('loading', 'Synchronisation…');
+  try {
+    const [sheetsData, calData] = await Promise.all([
+      api({ action: 'getProducts' }),
+      api({ action: 'getEvents' })
+    ]);
+
+    if (sheetsData.success) sheetProducts = sheetsData.products;
+
+    if (calData.success) {
+      products = calData.events.map((ev, i) => ({
+        id: i + 1, brand: ev.brand, name: ev.name,
+        barcode: ev.barcode || '', dlc: ev.dlc,
+        eventId: ev.eventId, archived: false,
+      }));
+      nextId = products.length + 1;
+      const total = products.length;
+      setSyncStatus('connected', `${total} suivi${total > 1 ? 's' : ''}`);
+      toast(`📅 ${total} produit${total > 1 ? 's' : ''} chargé${total > 1 ? 's' : ''} depuis Google Calendar`);
+    } else {
+      setSyncStatus('error', 'Erreur Calendar');
+      toast('⚠ Erreur Calendar : ' + (calData.error || ''), true);
+    }
+    render();
+  } catch(e) {
+    setSyncStatus('error', 'Erreur');
+    toast('⚠ Erreur : ' + e.message, true);
+  }
+}
+
+// ── Recherche produit (Sheets) ──
+function lookupLocal(query) {
+  return sheetProducts.filter(p =>
+    (p.nom_article && p.nom_article.toLowerCase().includes(query)) ||
+    (p.patissier   && p.patissier.toLowerCase().includes(query))   ||
+    (p.code_barres && String(p.code_barres).includes(query))
+  ).slice(0, 6);
+}
+
+// ── Modal ──
+function openModal() {
+  document.getElementById('f-date').min = today.toISOString().split('T')[0];
+  document.getElementById('modal').style.display = 'flex';
+}
+function closeModal() {
+  document.getElementById('modal').style.display = 'none';
+  ['f-brand','f-name','f-barcode','f-date','f-search'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const lr = document.getElementById('lookup-result');
+  lr.style.display = 'none'; lr.className = 'lookup-result';
+  hideSuggestions();
+}
+function closeModalOutside(e) { if (e.target.id === 'modal') closeModal(); }
+
+function hideSuggestions() {
+  const s = document.getElementById('suggestions');
+  s.style.display = 'none'; s.innerHTML = '';
+}
+
+function fillFromProduct(p) {
+  document.getElementById('f-brand').value   = p.patissier   || '';
+  document.getElementById('f-name').value    = p.nom_article || '';
+  document.getElementById('f-barcode').value = p.code_barres || '';
+  document.getElementById('f-search').value  = `${p.patissier} – ${p.nom_article}`;
+  const lr = document.getElementById('lookup-result');
+  lr.style.display = 'block';
+  lr.className = 'lookup-result found';
+  lr.textContent = `✓ ${p.patissier} – ${p.nom_article}`;
+  hideSuggestions();
+}
+
+let searchTimer = null;
+function onSearchInput() { clearTimeout(searchTimer); searchTimer = setTimeout(triggerSearch, 300); }
+
+function triggerSearch() {
+  const query = document.getElementById('f-search').value.trim().toLowerCase();
+  const lr    = document.getElementById('lookup-result');
+  const sugg  = document.getElementById('suggestions');
+  if (!query) { lr.style.display = 'none'; hideSuggestions(); return; }
+
+  const matches = lookupLocal(query);
+  if (matches.length === 1) {
+    fillFromProduct(matches[0]);
+  } else if (matches.length > 1) {
+    lr.style.display = 'none';
+    sugg.style.display = 'block';
+    sugg.innerHTML = matches.map(p => `
+      <div onclick="fillFromProduct(sheetProducts.find(x => x.nom_article===\`${p.nom_article.replace(/`/g,"'")}\` && x.patissier===\`${p.patissier.replace(/`/g,"'")}\`))"
+        style="padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);background:var(--surface);transition:background .15s"
+        onmouseover="this.style.background='#252520'" onmouseout="this.style.background='var(--surface)'">
+        <span style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px">${p.patissier}</span><br>
+        <span>${p.nom_article}</span>
+        ${p.code_barres ? `<span style="color:var(--muted);font-size:10px;margin-left:8px">${p.code_barres}</span>` : ''}
+      </div>`).join('');
+  } else {
+    hideSuggestions();
+    lr.style.display = 'block';
+    lr.className = 'lookup-result notfound';
+    lr.textContent = '✕ Produit non trouvé — entre les infos manuellement';
+  }
+}
+
+// ── Ajouter produit → crée événement Calendar ──
+async function addProduct() {
+  const brand   = document.getElementById('f-brand').value.trim();
+  const name    = document.getElementById('f-name').value.trim();
+  const barcode = document.getElementById('f-barcode').value.trim();
+  const dlc     = document.getElementById('f-date').value;
+  if (!brand || !name || !dlc) { toast('⚠ Marque, nom et DLC sont obligatoires', true); return; }
+
+  // Ferme le modal et affiche un feedback immédiat
+  hideSuggestions();
+  closeModal();
+  toast(`⏳ Ajout de "${name}" dans Google Calendar…`);
+
+  try {
+    const data = await api({ action: 'createEvent', brand, name, dlc, barcode });
+    if (data.success) {
+      products.push({ id: nextId++, brand, name, barcode, dlc, eventId: data.eventId, archived: false });
+      toast(data.alreadyExists ? `ℹ️ "${name}" existait déjà` : `✅ "${name}" ajouté dans Google Calendar !`);
+      render();
+    } else {
+      toast(`⚠ Erreur Calendar : ${data.error || 'inconnue'}`, true);
+    }
+  } catch(e) {
+    toast('⚠ Erreur : ' + e.message, true);
+  }
+}
+
+// ── Actions : archiver / supprimer ──
+async function archiveProduct(id) {
+  const p = products.find(x => x.id === id);
+  if (!p) return;
+  // Supprime l'événement Calendar si possible
+  if (p.eventId) {
+    try { await api({ action: 'deleteEvent', eventId: p.eventId }); } catch(e) {}
+  }
+  p.archived = true;
+  toast(`✓ "${p.name}" archivé et retiré du Calendar`);
+  render();
+}
+
+async function deleteProduct(id) {
+  const p = products.find(x => x.id === id);
+  if (!p) return;
+  if (p.eventId) {
+    try { await api({ action: 'deleteEvent', eventId: p.eventId }); } catch(e) {}
+  }
+  products = products.filter(x => x.id !== id);
+  toast(`✕ "${p.name}" supprimé du Calendar`);
+  render();
+}
+
+// ── Filters ──
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+// ── Render ──
+function render() { renderStats(); renderProducts(); }
+
+function renderStats() {
+  const active = products.filter(p => !p.archived);
+  const c = { red:0, yellow:0, green:0, grey:0 };
+  active.forEach(p => c[statusClass(daysUntil(p.dlc))]++);
+  document.getElementById('stats-bar').innerHTML = `
+    <div class="stat"><span class="stat-count" style="color:var(--red)">${c.red}</span><span class="stat-label">Urgents</span></div>
+    <div class="stat"><span class="stat-count" style="color:var(--yellow)">${c.yellow}</span><span class="stat-label">Bientôt</span></div>
+    <div class="stat"><span class="stat-count" style="color:var(--green)">${c.green}</span><span class="stat-label">OK</span></div>
+    <div class="stat"><span class="stat-count" style="color:var(--muted)">${active.length}</span><span class="stat-label">Total actifs</span></div>`;
+}
+
+function renderProducts() {
+  const list = document.getElementById('product-list');
+
+  if (currentFilter === 'archive') {
+    const archived = products.filter(p => p.archived);
+    if (!archived.length) { list.innerHTML = emptyState('Aucune archive','Les produits retirés apparaîtront ici'); return; }
+    list.innerHTML = `<div class="section-title">Archives (${archived.length})</div>
+      <div style="display:flex;flex-direction:column;gap:6px">${archived.map(archiveCard).join('')}</div>`;
+    return;
+  }
+
+  let active = products.filter(p => !p.archived).sort((a,b) => daysUntil(a.dlc) - daysUntil(b.dlc));
+  if (currentFilter !== 'all') active = active.filter(p => statusClass(daysUntil(p.dlc)) === currentFilter);
+
+  if (!active.length) {
+    list.innerHTML = emptyState('Aucun produit','Clique sur "+ Ajouter produit" pour commencer');
+    return;
+  }
+
+  const groups = { red:[], yellow:[], green:[], grey:[] };
+  active.forEach(p => groups[statusClass(daysUntil(p.dlc))].push(p));
+  const labels = { red:'🔴 À retirer immédiatement', yellow:'🟡 À surveiller', green:'🟢 Sous contrôle', grey:'⚪ Longue conservation' };
+
+  let html = '';
+  for (const [cls, items] of Object.entries(groups)) {
+    if (!items.length) continue;
+    html += `<div class="section-title">${labels[cls]} (${items.length})</div>
+             <div class="products-grid">${items.map(productCard).join('')}</div>`;
+  }
+  list.innerHTML = html;
+}
+
+const productCard = p => {
+  const days = daysUntil(p.dlc), cls = statusClass(days);
+  return `<div class="product-card ${cls}">
+    <div class="card-top"><span class="card-brand">${p.brand}</span><span class="status-badge">${statusLabel(days)}</span></div>
+    <div class="card-name">${p.name}</div>
+    <div class="card-date">DLC : <span>${fmtDate(p.dlc)}</span></div>
+    ${p.barcode ? `<div class="card-date">Code : <span>${p.barcode}</span></div>` : ''}
+    <div class="card-actions">
+      <button class="action-btn archive" onclick="archiveProduct(${p.id})">✓ Archiver</button>
+      <button class="action-btn delete"  onclick="deleteProduct(${p.id})">✕ Supprimer</button>
+    </div>
+  </div>`;
+};
+
+const archiveCard = p => `<div class="archive-card">
+  <div><div class="archive-name">${p.name}</div><div class="archive-meta">${p.brand} · DLC ${fmtDate(p.dlc)}</div></div>
+  <span class="archive-tag">Archivé</span>
+</div>`;
+
+const emptyState = (title, sub) => `<div class="empty-state">
+  <div class="empty-state-icon">🍰</div>
+  <div class="empty-state-text">${title}</div>
+  <div class="empty-state-sub">${sub}</div>
+</div>`;
+
+// ── Toast ──
+function toast(msg, warn=false) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.style.borderColor = warn ? 'var(--yellow)' : 'var(--border)';
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, 3000);
+}
+
+// ── Init ──
+render();
+fullSync();
+</script>
+</body>
+</html>
