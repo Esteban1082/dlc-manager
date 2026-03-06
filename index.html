@@ -261,6 +261,7 @@
       <div class="barcode-row">
         <input class="form-input" id="f-search" type="text" placeholder="Tape un nom ou scanne un code…" oninput="onSearchInput()" autocomplete="off">
         <button class="btn-scan" onclick="triggerSearch()" title="Rechercher dans Sheets">🔍</button>
+        <button class="btn-scan" onclick="openScanner()" title="Scanner via caméra">📷</button>
       </div>
       <div class="lookup-result" id="lookup-result"></div>
       <div id="suggestions" style="display:none;margin-top:4px;border:1px solid var(--border);border-radius:8px;overflow:hidden;"></div>
@@ -286,6 +287,25 @@
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal()">Annuler</button>
       <button class="btn-confirm" onclick="addProduct()">Ajouter →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scanner Modal -->
+<div class="modal-overlay" id="modal-scanner" style="display:none" onclick="closeScannerOutside(event)">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-title">📷 Scanner un code-barres</div>
+    <div style="position:relative;border-radius:10px;overflow:hidden;background:#000;aspect-ratio:4/3">
+      <video id="scanner-video" style="width:100%;height:100%;object-fit:cover" autoplay muted playsinline></video>
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
+        <div style="width:60%;height:40%;border:2px solid var(--amber);border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,.4)"></div>
+      </div>
+      <div id="scan-status" style="position:absolute;bottom:12px;left:0;right:0;text-align:center;font-size:12px;color:rgba(255,255,255,.7)">
+        Pointez vers un code-barres…
+      </div>
+    </div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn-cancel" onclick="closeScanner()">Annuler</button>
     </div>
   </div>
 </div>
@@ -506,7 +526,13 @@ async function archiveProduct(id) {
   render();
 }
 
-async function deleteProduct(id) {
+function clearAllArchives() {
+  const count = products.filter(p => p.archived).length;
+  if (!count) return;
+  products = products.filter(p => !p.archived);
+  toast(`🗑 ${count} archive${count > 1 ? 's' : ''} supprimée${count > 1 ? 's' : ''}`);
+  render();
+}
   const p = products.find(x => x.id === id);
   if (!p) return;
   if (p.eventId) {
@@ -559,6 +585,66 @@ async function confirmEditDate() {
     toast('⚠ Erreur réseau', true);
   }
 }
+// ── Phase 4 : Scanner code-barres ──
+let scannerStream = null;
+let scannerInterval = null;
+
+async function openScanner() {
+  document.getElementById('modal-scanner').style.display = 'flex';
+  const video = document.getElementById('scanner-video');
+  try {
+    scannerStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    video.srcObject = scannerStream;
+    await video.play();
+    startDecoding(video);
+  } catch(e) {
+    document.getElementById('scan-status').textContent = '⚠ Caméra non disponible : ' + e.message;
+  }
+}
+
+function closeScannerOutside(e) { if (e.target.id === 'modal-scanner') closeScanner(); }
+
+function closeScanner() {
+  if (scannerInterval) { clearInterval(scannerInterval); scannerInterval = null; }
+  if (scannerStream)   { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
+  if (window._zxingReader) { try { window._zxingReader.reset(); } catch(e){} window._zxingReader = null; }
+  document.getElementById('modal-scanner').style.display = 'none';
+}
+
+function startDecoding(video) {
+  if ('BarcodeDetector' in window) {
+    const detector = new BarcodeDetector({ formats: ['ean_13','ean_8','code_128','code_39','upc_a','upc_e','qr_code'] });
+    scannerInterval = setInterval(async () => {
+      if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+      try {
+        const barcodes = await detector.detect(video);
+        if (barcodes.length > 0) onBarcodeScanned(barcodes[0].rawValue);
+      } catch(e) {}
+    }, 300);
+  } else {
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/@zxing/library@latest/umd/index.min.js';
+    script.onload = () => {
+      const reader = new ZXing.BrowserMultiFormatReader();
+      window._zxingReader = reader;
+      reader.decodeFromVideoElement(video, (result) => {
+        if (result) onBarcodeScanned(result.getText());
+      });
+    };
+    document.head.appendChild(script);
+  }
+}
+
+function onBarcodeScanned(code) {
+  closeScanner();
+  document.getElementById('f-search').value = code;
+  document.getElementById('f-barcode').value = code;
+  toast(`📷 Code détecté : ${code}`);
+  triggerSearch();
+}
+
 function setFilter(f, btn) {
   currentFilter = f;
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -584,9 +670,25 @@ function renderProducts() {
   const list = document.getElementById('product-list');
 
   if (currentFilter === 'archive') {
-    const archived = products.filter(p => p.archived);
+    let archived = products.filter(p => p.archived);
+
+    // Dédoublonnage : garde le plus récent par nom+marque
+    const seen = {};
+    archived = archived.filter(p => {
+      const key = `${p.brand}|${p.name}`;
+      if (!seen[key] || p.dlc > seen[key]) { seen[key] = p.dlc; return true; }
+      return false;
+    });
+    archived.sort((a, b) => b.dlc.localeCompare(a.dlc));
+
     if (!archived.length) { list.innerHTML = emptyState('Aucune archive','Les produits retirés apparaîtront ici'); return; }
-    list.innerHTML = `<div class="section-title">Archives (${archived.length})</div>
+    list.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="section-title" style="margin:0;flex:1">Archives (${archived.length})</div>
+        <button onclick="clearAllArchives()" style="padding:6px 14px;border-radius:6px;border:1px solid var(--red);background:transparent;color:var(--red);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;cursor:pointer">
+          🗑 Tout vider
+        </button>
+      </div>
       <div style="display:flex;flex-direction:column;gap:6px">${archived.map(archiveCard).join('')}</div>`;
     return;
   }
