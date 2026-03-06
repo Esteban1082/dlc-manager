@@ -586,16 +586,28 @@ async function confirmEditDate() {
 // ── Phase 4 : Scanner code-barres ──
 let scannerStream = null;
 let scannerInterval = null;
+let zxingReady = false;
+
+// Précharge ZXing dès le démarrage de l'app
+function preloadZXing() {
+  if (window.ZXing) { zxingReady = true; return; }
+  const s = document.createElement('script');
+  s.src = 'https://unpkg.com/@zxing/library@0.18.6/umd/index.min.js';
+  s.onload = () => { zxingReady = true; };
+  document.head.appendChild(s);
+}
 
 async function openScanner() {
   document.getElementById('modal-scanner').style.display = 'flex';
+  document.getElementById('scan-status').textContent = '📷 Démarrage caméra…';
   const video = document.getElementById('scanner-video');
   try {
     scannerStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }
     });
     video.srcObject = scannerStream;
     await video.play();
+    document.getElementById('scan-status').textContent = '🔍 Pointez vers un code-barres…';
     startDecoding(video);
   } catch(e) {
     document.getElementById('scan-status').textContent = '⚠ Caméra non disponible : ' + e.message;
@@ -607,32 +619,71 @@ function closeScannerOutside(e) { if (e.target.id === 'modal-scanner') closeScan
 function closeScanner() {
   if (scannerInterval) { clearInterval(scannerInterval); scannerInterval = null; }
   if (scannerStream)   { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
-  if (window._zxingReader) { try { window._zxingReader.reset(); } catch(e){} window._zxingReader = null; }
+  if (window._zxingReader) {
+    try { window._zxingReader.reset(); } catch(e){}
+    window._zxingReader = null;
+  }
   document.getElementById('modal-scanner').style.display = 'none';
 }
 
 function startDecoding(video) {
+  // Essaie BarcodeDetector natif (Chrome Android)
   if ('BarcodeDetector' in window) {
-    const detector = new BarcodeDetector({ formats: ['ean_13','ean_8','code_128','code_39','upc_a','upc_e','qr_code'] });
-    scannerInterval = setInterval(async () => {
-      if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
-      try {
-        const barcodes = await detector.detect(video);
-        if (barcodes.length > 0) onBarcodeScanned(barcodes[0].rawValue);
-      } catch(e) {}
-    }, 300);
-  } else {
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/@zxing/library@latest/umd/index.min.js';
-    script.onload = () => {
-      const reader = new ZXing.BrowserMultiFormatReader();
-      window._zxingReader = reader;
-      reader.decodeFromVideoElement(video, (result) => {
-        if (result) onBarcodeScanned(result.getText());
-      });
-    };
-    document.head.appendChild(script);
+    BarcodeDetector.getSupportedFormats().then(formats => {
+      const detector = new BarcodeDetector({ formats });
+      let lastCode = null;
+      scannerInterval = setInterval(async () => {
+        if (video.readyState < 2) return;
+        try {
+          const results = await detector.detect(video);
+          if (results.length > 0 && results[0].rawValue !== lastCode) {
+            lastCode = results[0].rawValue;
+            document.getElementById('scan-status').textContent = '✅ Code détecté !';
+            setTimeout(() => onBarcodeScanned(results[0].rawValue), 200);
+          }
+        } catch(e) {}
+      }, 250);
+    });
+    return;
   }
+
+  // Fallback ZXing
+  const tryZXing = () => {
+    if (!window.ZXing) {
+      document.getElementById('scan-status').textContent = '⏳ Chargement du scanner…';
+      setTimeout(tryZXing, 500);
+      return;
+    }
+    document.getElementById('scan-status').textContent = '🔍 Pointez vers un code-barres…';
+    try {
+      const hints = new Map();
+      const reader = new ZXing.BrowserMultiFormatReader(hints);
+      window._zxingReader = reader;
+      reader.decodeFromVideoElement(video).then(result => {
+        if (result) {
+          document.getElementById('scan-status').textContent = '✅ Code détecté !';
+          setTimeout(() => onBarcodeScanned(result.getText()), 200);
+        }
+      }).catch(() => {
+        // Continue scanning silently
+      });
+      // ZXing continuous scan via interval
+      scannerInterval = setInterval(async () => {
+        if (video.readyState < 2) return;
+        try {
+          const result = await reader.decodeOnce(video);
+          if (result) {
+            document.getElementById('scan-status').textContent = '✅ Code détecté !';
+            clearInterval(scannerInterval);
+            setTimeout(() => onBarcodeScanned(result.getText()), 200);
+          }
+        } catch(e) {}
+      }, 300);
+    } catch(e) {
+      document.getElementById('scan-status').textContent = '⚠ Erreur scanner : ' + e.message;
+    }
+  };
+  tryZXing();
 }
 
 function onBarcodeScanned(code) {
@@ -725,7 +776,7 @@ function toast(msg, warn=false) {
 
 // ── Init ──
 render();
-// Petit délai pour laisser le temps à la page de charger complètement
+preloadZXing();
 setTimeout(fullSync, 500);
 </script>
 </body>
