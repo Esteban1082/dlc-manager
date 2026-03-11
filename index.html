@@ -340,7 +340,7 @@
 </div>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--border);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px">
-  v2.8 · 10/03/2026 15:01
+  v2.8 · 11/03/2026 23:10
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -395,6 +395,7 @@
     </div>
     <div style="display:flex;gap:10px">
       <button onclick="crLookup()" style="flex:1;padding:14px;background:var(--amber);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:#000;cursor:pointer">🔍 Vérifier</button>
+      <button onclick="openCrScannerModal()" style="padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:20px;cursor:pointer" title="Scanner un code-barres">📷</button>
     </div>
   </div>
 
@@ -795,6 +796,11 @@ function openControleRapide() {
   updateCrStats();
   updateCrToday();
   setTimeout(() => document.getElementById('cr-search').focus(), 100);
+}
+
+function openCrScannerModal() {
+  window._crScanMode = true;
+  openScanner();
 }
 
 function closeControleRapide() {
@@ -1378,6 +1384,12 @@ function onBarcodeScanned(code) {
     window._quickScanMode = false;
     document.getElementById('quick-search').value = code;
     quickLookup();
+    return;
+  }
+  if (window._crScanMode) {
+    window._crScanMode = false;
+    document.getElementById('cr-search').value = code;
+    crLookup();
     return;
   }
   document.getElementById('f-search').value  = code;
