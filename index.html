@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DLC Manager – Rob The Market</title>
+<title>DLC Manager v2.10 – Rob The Market</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;0,900;1,300&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -287,7 +287,7 @@
 
   /* ── v2.8: FAB (floating action button) for mobile ── */
   .fab-add {
-    display:none; position:fixed; bottom:24px; right:20px; z-index:200;
+    display:none; position:fixed; bottom:84px; right:20px; z-index:200;
     width:56px; height:56px; border-radius:50%; background:var(--amber); color:#000;
     border:none; font-size:28px; font-weight:700; cursor:pointer;
     box-shadow:0 4px 16px rgba(232,160,69,.4);
@@ -323,6 +323,32 @@
     .toast-container { bottom:90px; right:14px; left:14px; }
     .toast { min-width:auto; }
   }
+
+  /* ── v2.9 : Tab Bar ── */
+  .tab-bar {
+    position:fixed; bottom:0; left:0; right:0; height:60px; z-index:150;
+    background:var(--bg); border-top:1px solid var(--border);
+    display:flex; align-items:stretch;
+  }
+  .tab-btn {
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:3px; background:transparent; border:none; border-top:2px solid transparent;
+    color:var(--muted); font-family:'DM Mono',monospace; font-size:9px; letter-spacing:1px;
+    text-transform:uppercase; cursor:pointer; transition:color .15s, border-color .15s;
+  }
+  .tab-btn.active { color:var(--amber); border-top-color:var(--amber); }
+  .tab-btn:active { transform:scale(0.95); }
+  .tab-icon { font-size:20px; line-height:1; }
+
+  /* ── v2.9 : Views padding (tab bar) ── */
+  .view-container { padding-bottom:80px; }
+
+  /* ── v2.9 : Historique cards ── */
+  .histo-section-title {
+    font-size:11px; color:var(--muted); letter-spacing:2px; text-transform:uppercase;
+    margin-bottom:8px; margin-top:16px; display:flex; align-items:center; gap:8px;
+  }
+  .histo-section-title::after { content:''; flex:1; height:1px; background:var(--border); }
 </style>
 </head>
 <body>
@@ -367,6 +393,7 @@
         <span id="sync-time" style="font-size:9px;color:var(--muted)">jamais synchronisé</span>
       </div>
     </div>
+
     <div class="date-display">
       <span id="clock">--:--</span>
       <span id="date-str"></span>
@@ -383,6 +410,7 @@
 
 <div class="stats" id="stats-bar"></div>
 
+<div id="view-dlc" class="view-container">
 <!-- Barre de recherche rapide -->
 <div class="main" style="padding-bottom:0;margin-bottom:0">
   <div style="max-width:100%;position:relative">
@@ -417,11 +445,87 @@
   <div id="product-list"></div>
 </div>
 
+</div><!-- /view-dlc -->
+
+<!-- v2.9 : Vue Produits -->
+<div id="view-produits" class="view-container" style="display:none;padding:20px 24px 80px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--amber)">📋 Base produits</div>
+    <button onclick="openAddProductToBase()" style="padding:8px 14px;background:var(--amber);border:none;border-radius:8px;font-family:'Fraunces',serif;font-size:14px;font-weight:600;color:#000;cursor:pointer">＋ Nouveau</button>
+  </div>
+  <input id="produits-search" type="text" placeholder="🔍 Rechercher dans la base…" oninput="renderProduitsBase()" autocomplete="off"
+    style="width:100%;box-sizing:border-box;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;margin-bottom:12px;transition:border-color .15s">
+  <div id="produits-stats" style="font-size:12px;color:var(--muted);margin-bottom:16px"></div>
+  <div id="produits-list"></div>
+</div>
+
+<!-- v2.10 : Vue Pertes -->
+<div id="view-pertes" class="view-container" style="display:none;padding:20px 24px 80px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--amber)">📉 Enregistrer une perte</div>
+  </div>
+
+  <!-- Zone de recherche / scan -->
+  <div style="position:relative;margin-bottom:12px">
+    <div class="barcode-row">
+      <input id="pertes-search" type="text" placeholder="🔍  Rechercher un produit…"
+        oninput="onPertesInput()" onkeydown="if(event.key==='Enter'){hidePertesDropdown();searchPertesProduct()}"
+        autocomplete="off" aria-label="Rechercher un produit pour perte"
+        style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-family:'DM Mono',monospace;font-size:14px;outline:none;transition:border-color .15s">
+      <button onclick="openPertesScanner()" title="Scanner" aria-label="Scanner un code-barres"
+        style="flex-shrink:0;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:20px;cursor:pointer;transition:all .15s">📷</button>
+    </div>
+    <div id="pertes-suggestions" style="display:none;position:absolute;left:0;right:0;z-index:100;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-top:4px"></div>
+  </div>
+
+  <!-- Div scanner pertes (injecté dynamiquement) -->
+  <div id="pertes-scanner-wrap" style="display:none;margin-bottom:12px"></div>
+
+  <!-- Carte produit sélectionné + saisie quantité -->
+  <div id="pertes-selected" style="display:none;background:var(--surface);border:1px solid var(--amber);border-radius:12px;padding:16px;margin-bottom:16px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
+      <div style="flex:1;min-width:0">
+        <div id="ps-nom" style="font-family:'Fraunces',serif;font-size:17px;font-weight:700;margin-bottom:3px"></div>
+        <div id="ps-meta" style="font-size:12px;color:var(--muted)"></div>
+      </div>
+      <button onclick="clearPertesSelection()" style="flex-shrink:0;padding:5px 10px;background:transparent;border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--muted);cursor:pointer;margin-left:8px">✕ Changer</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+      <label style="font-size:12px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;flex-shrink:0">Quantité perdue</label>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button onclick="adjustQty(-1)" style="width:36px;height:36px;background:var(--border);border:none;border-radius:8px;font-size:18px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700">−</button>
+        <input id="pertes-qty" type="number" min="1" max="999" value="1"
+          style="width:64px;text-align:center;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:18px;font-weight:700;outline:none">
+        <button onclick="adjustQty(1)" style="width:36px;height:36px;background:var(--border);border:none;border-radius:8px;font-size:18px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700">＋</button>
+      </div>
+    </div>
+    <button onclick="enregistrerPerte()" aria-label="Enregistrer la perte"
+      style="width:100%;padding:14px;background:var(--red);border:none;border-radius:10px;font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:#fff;cursor:pointer;transition:all .15s">
+      📉 Enregistrer la perte
+    </button>
+  </div>
+
+  <!-- Séparateur + Historique des pertes -->
+  <div style="display:flex;align-items:center;gap:12px;margin:24px 0 16px">
+    <div style="font-size:12px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;white-space:nowrap">Historique des pertes</div>
+    <div style="flex:1;height:1px;background:var(--border)"></div>
+    <button onclick="loadPertes()" style="padding:6px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--muted);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;transition:all .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">↻</button>
+  </div>
+
+  <div id="pertes-histo-filters" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button onclick="setPertesFilter('today',this)" class="filter-btn">Aujourd'hui</button>
+    <button onclick="setPertesFilter('semaine',this)" class="filter-btn active">Cette semaine</button>
+    <button onclick="setPertesFilter('mois',this)" class="filter-btn">Ce mois</button>
+    <button onclick="setPertesFilter('tout',this)" class="filter-btn">Tout</button>
+  </div>
+  <div id="pertes-stats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px"></div>
+  <div id="pertes-list"></div>
+</div>
 <!-- v2.8: FAB (Floating Action Button) mobile -->
 <button class="fab-add" id="fab-add" onclick="openModal()" aria-label="Ajouter un nouveau produit">＋</button>
 
 <div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;z-index:50;letter-spacing:1px;opacity:.4">
-  v2.8 · 13/03/2026
+  v2.9 · 13/03/2026
 </div>
 
 <!-- Modal Ajout en lot -->
@@ -885,6 +989,8 @@ async function verifyProduct(id) {
   const p = products.find(x => x.id === id);
   if (!p) return;
   products = products.filter(x => x.id !== id);
+  // v2.9 : log silencieux du retrait
+  api({ action: 'logRetrait', brand: p.brand, name: p.name, dlc: p.dlc, barcode: p.barcode || '' }).catch(() => {});
   render();
   updateNoDlcBadge();
   if (p.eventId) {
@@ -922,12 +1028,13 @@ function closeControleRapide() {
 
 // v2.8: FAB visibility logic
 function updateFabVisibility() {
-  const cr = document.getElementById('controle-rapide');
+  const cr  = document.getElementById('controle-rapide');
   const fab = document.getElementById('fab-add');
-  if (cr && cr.style.display !== 'none') {
+  const crOpen = cr && cr.style.display !== 'none';
+  // v2.9 : FAB seulement sur onglet DLC
+  if (crOpen || currentTab !== 'dlc') {
     fab.style.display = 'none';
   } else {
-    // Only show on mobile via CSS, but remove inline hide
     fab.style.display = '';
   }
 }
@@ -1094,6 +1201,8 @@ function crVerify(id) {
   const p = products.find(x => x.id === id);
   if (!p) return;
   products = products.filter(x => x.id !== id);
+  // v2.9 : log silencieux du retrait
+  api({ action: 'logRetrait', brand: p.brand, name: p.name, dlc: p.dlc, barcode: p.barcode || '' }).catch(() => {});
   render(); updateCrStats(); updateCrToday(); updateNoDlcBadge();
   document.getElementById('cr-result-inner').innerHTML =
     `<div style="text-align:center;padding:20px;color:var(--green);font-family:'Fraunces',serif;font-size:18px">✓ "${p.name}" retiré !</div>`;
@@ -1659,6 +1768,7 @@ function renderStats() {
     <div class="stat"><span class="stat-icon">🟡</span><span class="stat-count" style="color:var(--yellow)">${c.yellow}</span><span class="stat-label">Bientôt</span></div>
     <div class="stat"><span class="stat-icon">🟢</span><span class="stat-count" style="color:var(--green)">${c.green}</span><span class="stat-label">OK</span></div>
     <div class="stat"><span class="stat-icon">📦</span><span class="stat-count" style="color:var(--muted)">${active.length}</span><span class="stat-label">Total actifs</span></div>`;
+
 }
 
 function renderProducts() {
@@ -1759,10 +1869,410 @@ function toast(msg, warn=false) {
   setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, 3000);
 }
 
+
+// ══════════════════════════════════════════════════════════════════
+// APPS SCRIPT — Actions à ajouter côté Google Apps Script pour v2.9
+//
+// action: 'logRetrait'   params: brand, name, dlc, barcode
+//   → Ajoute une ligne dans l'onglet "Historique" de Sheets
+//     Colonnes: Date_retrait | Marque | Nom | DLC | Code_barres
+//
+// action: 'getHistorique'
+//   → { success:true, historique:[{brand,name,dlc,barcode,retiréLe:'YYYY-MM-DD'}] }
+//
+// action: 'deleteProduct'  params: name, brand
+//   → Supprime la ligne correspondante dans l'onglet "Produits"
+// ══════════════════════════════════════════════════════════════════
+
+// ── v2.9 : Navigation par onglets ──
+let currentTab = 'dlc';
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('view-dlc').style.display        = tab === 'dlc'        ? '' : 'none';
+  document.getElementById('view-produits').style.display   = tab === 'produits'   ? '' : 'none';
+  document.getElementById('view-pertes').style.display    = tab === 'pertes'    ? '' : 'none';
+  updateFabVisibility();
+  if (tab === 'produits') {
+    if (sheetProducts.length === 0) {
+      // Base pas encore chargée → déclencher un rechargement
+      const listEl = document.getElementById('produits-list');
+      if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Chargement de la base…</div>';
+      api({ action: 'getProducts' }).then(d => {
+        if (d.success) { sheetProducts = d.products; renderProduitsBase(); }
+      }).catch(() => {
+        if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Erreur — vérifie la connexion</div>';
+      });
+    } else {
+      renderProduitsBase();
+    }
+  }
+  if (tab === 'pertes' && pertesData.length === 0) loadPertes();
+}
+
+// ── v2.9 : Base produits ──
+// ── Détecte automatiquement les clés nom/marque/barcode quel que soit le nom de colonne ──
+function getProduitFields(p) {
+  const keys = Object.keys(p);
+  // Nom : cherche nom_article, nom, name, article, designation, libelle…
+  const nomKey = keys.find(k => /nom_article|^nom$|^name$|article|designation|libelle/i.test(k));
+  // Marque : cherche patissier, marque, brand, fournisseur, fabricant…
+  const marqueKey = keys.find(k => /patissier|marque|brand|fournisseur|fabricant/i.test(k));
+  // Barcode : cherche code_barres, barcode, ean, upc, code…
+  const barcodeKey = keys.find(k => /code_barres|barcode|ean|upc|^code$/i.test(k));
+  return {
+    nom:     (nomKey    ? String(p[nomKey]    || '') : '').trim(),
+    marque:  (marqueKey ? String(p[marqueKey] || '') : '').trim(),
+    barcode: (barcodeKey? String(p[barcodeKey]|| '') : '').trim(),
+  };
+}
+
+function renderProduitsBase() {
+  const q = (document.getElementById('produits-search')?.value || '').toLowerCase().trim();
+
+  // Filtrage robuste : utilise getProduitFields pour matcher quelle que soit la structure
+  const items = q
+    ? sheetProducts.filter(p => {
+        const f = getProduitFields(p);
+        return f.nom.toLowerCase().includes(q) ||
+               f.marque.toLowerCase().includes(q) ||
+               f.barcode.includes(q);
+      })
+    : sheetProducts;
+
+  const statsEl = document.getElementById('produits-stats');
+
+  // Debug : affiche les clés du 1er produit si la base est chargée mais vide visuellement
+  if (sheetProducts.length > 0 && statsEl) {
+    const sample = getProduitFields(sheetProducts[0]);
+    const allEmpty = !sample.nom && !sample.marque;
+    if (allEmpty) {
+      // Les clés ne matchent pas — affiche un message d'aide avec les vraies clés
+      const realKeys = Object.keys(sheetProducts[0]).join(', ');
+      statsEl.innerHTML = `<span style="color:var(--yellow)">⚠ Colonnes Sheets non reconnues : <b>${realKeys}</b> — signale ça à Esteban</span>`;
+    } else {
+      statsEl.textContent =
+        `${sheetProducts.length} produit${sheetProducts.length > 1 ? 's' : ''} dans la base${q ? ` · ${items.length} résultat${items.length !== 1 ? 's' : ''}` : ''}`;
+    }
+  } else if (statsEl) {
+    statsEl.textContent = sheetProducts.length === 0
+      ? 'Base non chargée — synchronise d\'abord'
+      : `${sheetProducts.length} produit${sheetProducts.length > 1 ? 's' : ''} dans la base${q ? ` · ${items.length} résultat${items.length !== 1 ? 's' : ''}` : ''}`;
+  }
+
+  const list = document.getElementById('produits-list');
+  if (!list) return;
+  if (!items.length) {
+    list.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--muted)">
+      <div style="font-size:36px;margin-bottom:12px">📋</div>
+      <div style="font-family:'Fraunces',serif;font-size:18px;margin-bottom:6px">${q ? 'Aucun résultat' : sheetProducts.length === 0 ? 'Base non chargée' : 'Base vide'}</div>
+      <div style="font-size:12px">${q ? 'Essaie un autre terme' : sheetProducts.length === 0 ? 'Clique sur le bouton Sync en haut' : 'Clique sur ＋ Nouveau pour ajouter'}</div>
+    </div>`;
+    return;
+  }
+  list.innerHTML = items.map(p => {
+    const { nom, marque, barcode } = getProduitFields(p);
+    const safeN  = nom.replace(/'/g, "\'");
+    const safeM  = marque.replace(/'/g, "\'");
+    const safeB  = barcode.replace(/'/g, "\'");
+    const hasDlc = products.some(x => x.name.toLowerCase().trim() === nom.toLowerCase().trim());
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+          <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nom || '<span style="color:var(--muted);font-style:italic">Sans nom</span>'}</div>
+          ${hasDlc ? '<span style="font-size:9px;padding:2px 7px;border-radius:4px;background:rgba(76,219,138,.15);color:var(--green);flex-shrink:0;letter-spacing:.5px">DLC ✓</span>' : ''}
+        </div>
+        <div style="font-size:11px;color:var(--muted)">${marque}${barcode ? ' · ' + barcode : ''}</div>
+      </div>
+      <button onclick="addDlcFromBase('${safeN}','${safeM}','${safeB}')"
+        style="flex-shrink:0;padding:7px 10px;background:var(--amber);border:none;border-radius:7px;font-size:12px;font-weight:700;color:#000;cursor:pointer;white-space:nowrap">📅 DLC</button>
+      <button onclick="deleteProductFromBase('${safeN}','${safeM}')"
+        style="flex-shrink:0;padding:7px 10px;background:transparent;border:1px solid rgba(255,64,64,.3);border-radius:7px;font-size:14px;color:var(--red);cursor:pointer">🗑</button>
+    </div>`;
+  }).join('');
+}
+
+function addDlcFromBase(nom, marque, barcode) {
+  addDlcFromNodlc(nom, marque, barcode);
+  switchTab('dlc');
+}
+
+async function deleteProductFromBase(nom, marque) {
+  askConfirm(`Supprimer "${nom}" de la base produits ?`, async () => {
+    toast(`⏳ Suppression de "${nom}"…`);
+    try {
+      const data = await api({ action: 'deleteProduct', name: nom, brand: marque });
+      if (data && data.success) {
+        sheetProducts = sheetProducts.filter(p =>
+          !((p.nom_article || p.nom || '').toLowerCase() === nom.toLowerCase() &&
+            (p.patissier || p.marque || '').toLowerCase() === marque.toLowerCase()));
+        renderProduitsBase();
+        updateNoDlcBadge();
+        toast(`✓ "${nom}" supprimé de la base`);
+      } else {
+        toast(`⚠ ${(data && data.error) || 'Mets à jour le Apps Script (action deleteProduct)'}`, true);
+      }
+    } catch(e) { toast('⚠ Erreur réseau', true); }
+  });
+}
+
+function openAddProductToBase() {
+  document.getElementById('f-name').value    = '';
+  document.getElementById('f-brand').value   = '';
+  document.getElementById('f-barcode').value = '';
+  document.getElementById('f-search').value  = '';
+  document.getElementById('modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('f-name').focus(), 200);
+}
+
+// ── v2.10 : Module Pertes ──
+let pertesData        = [];
+let pertesFilter      = 'semaine';
+let pertesScanner     = null;
+let pertesScannerOpen = false;
+let selectedPerte     = null; // { nom, marque, barcode }
+
+// ── Recherche textuelle produits ──
+function onPertesInput() {
+  const q = (document.getElementById('pertes-search')?.value || '').toLowerCase().trim();
+  const sug = document.getElementById('pertes-suggestions');
+  if (!sug) return;
+  if (!q || q.length < 2) { sug.style.display = 'none'; return; }
+  const matches = sheetProducts.filter(p =>
+    (p.nom_article || '').toLowerCase().includes(q) ||
+    (p.patissier   || '').toLowerCase().includes(q) ||
+    String(p.code_barres || '').includes(q)
+  ).slice(0, 8);
+  if (!matches.length) { sug.style.display = 'none'; return; }
+  sug.innerHTML = matches.map(p => {
+    const nom    = p.nom_article || p.nom || '';
+    const marque = p.patissier   || p.marque || '';
+    const code   = p.code_barres || '';
+    return `<div onclick="selectPerteProduit('${nom.replace(/'/g,"\'")}','${marque.replace(/'/g,"\'")}','${code}')"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .1s"
+      onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background=''"
+    >
+      <div style="font-family:'Fraunces',serif;font-size:14px;font-weight:600">${nom}</div>
+      <div style="font-size:11px;color:var(--muted)">${marque}${code ? ' · ' + code : ''}</div>
+    </div>`;
+  }).join('');
+  sug.style.display = 'block';
+}
+
+function hidePertesDropdown() {
+  const sug = document.getElementById('pertes-suggestions');
+  if (sug) sug.style.display = 'none';
+}
+
+function searchPertesProduct() {
+  hidePertesDropdown();
+  const q = (document.getElementById('pertes-search')?.value || '').toLowerCase().trim();
+  if (!q) return;
+  // Cherche d'abord par barcode exact, sinon par nom
+  const found = sheetProducts.find(p => String(p.code_barres || '') === q) ||
+                sheetProducts.find(p => (p.nom_article || '').toLowerCase().includes(q));
+  if (found) {
+    selectPerteProduit(found.nom_article || found.nom || '', found.patissier || found.marque || '', found.code_barres || '');
+  } else {
+    toast('⚠ Produit non trouvé dans la base', true);
+  }
+}
+
+function selectPerteProduit(nom, marque, barcode) {
+  selectedPerte = { nom, marque, barcode };
+  document.getElementById('pertes-search').value = '';
+  hidePertesDropdown();
+  closePertesScanner();
+  document.getElementById('ps-nom').textContent  = nom;
+  document.getElementById('ps-meta').textContent = marque + (barcode ? ' · ' + barcode : '');
+  document.getElementById('pertes-qty').value    = 1;
+  document.getElementById('pertes-selected').style.display = 'block';
+}
+
+function clearPertesSelection() {
+  selectedPerte = null;
+  document.getElementById('pertes-selected').style.display = 'none';
+  document.getElementById('pertes-search').value = '';
+  document.getElementById('pertes-search').focus();
+}
+
+function adjustQty(delta) {
+  const inp = document.getElementById('pertes-qty');
+  if (!inp) return;
+  const v = parseInt(inp.value) || 1;
+  inp.value = Math.max(1, Math.min(999, v + delta));
+}
+
+// ── Scanner pertes ──
+function openPertesScanner() {
+  if (pertesScannerOpen) { closePertesScanner(); return; }
+  const wrap = document.getElementById('pertes-scanner-wrap');
+  if (!wrap) return;
+  const divId = 'pertes-qr-div';
+  wrap.innerHTML = `<div id="${divId}" style="width:100%;max-width:400px;margin:0 auto;border-radius:12px;overflow:hidden"></div>`;
+  wrap.style.display = 'block';
+  pertesScannerOpen  = true;
+  try {
+    pertesScanner = new Html5Qrcode(divId);
+    pertesScanner.start({ facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 250, height: 120 } },
+      (decodedText) => {
+        closePertesScanner();
+        // Chercher dans la base par barcode
+        const found = sheetProducts.find(p => String(p.code_barres || '').trim() === decodedText.trim());
+        if (found) {
+          selectPerteProduit(found.nom_article || found.nom || '', found.patissier || found.marque || '', found.code_barres || '');
+          toast('📷 Produit trouvé : ' + (found.nom_article || found.nom));
+        } else {
+          // Pré-remplir la recherche pour aide manuelle
+          document.getElementById('pertes-search').value = decodedText;
+          toast('⚠ Code non trouvé dans la base — vérifiez le nom', true);
+        }
+      },
+      () => {}
+    ).catch(err => { toast('⚠ Erreur caméra : ' + err, true); closePertesScanner(); });
+  } catch(e) { toast('⚠ Erreur scanner', true); closePertesScanner(); }
+}
+
+function closePertesScanner() {
+  if (pertesScanner) {
+    pertesScanner.stop().catch(() => {});
+    pertesScanner = null;
+  }
+  pertesScannerOpen = false;
+  const wrap = document.getElementById('pertes-scanner-wrap');
+  if (wrap) { wrap.style.display = 'none'; wrap.innerHTML = ''; }
+}
+
+// ── Enregistrement de la perte ──
+async function enregistrerPerte() {
+  if (!selectedPerte) return;
+  const qty = parseInt(document.getElementById('pertes-qty')?.value) || 1;
+  const { nom, marque, barcode } = selectedPerte;
+  toast(`⏳ Enregistrement de la perte…`);
+  try {
+    const data = await api({
+      action: 'logPerte',
+      name:     nom,
+      brand:    marque,
+      barcode:  barcode,
+      quantity: String(qty)
+    });
+    if (data && data.success) {
+      toast(`✓ Perte enregistrée — ${qty} × ${nom}`);
+      clearPertesSelection();
+      // Rafraîchir l'historique
+      pertesData = [];
+      loadPertes();
+    } else {
+      toast(`⚠ ${data?.error || 'Mets à jour le Apps Script (action logPerte)'}`, true);
+    }
+  } catch(e) { toast('⚠ Erreur réseau', true); }
+}
+
+// ── Filtres et affichage historique pertes ──
+function setPertesFilter(f, btn) {
+  pertesFilter = f;
+  document.querySelectorAll('#pertes-histo-filters .filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderPertes();
+}
+
+async function loadPertes() {
+  const list = document.getElementById('pertes-list');
+  if (list) list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Chargement…</div>';
+  try {
+    const data = await api({ action: 'getPertes' });
+    pertesData = (data.success && data.pertes) ? data.pertes : [];
+    renderPertes();
+  } catch(e) {
+    if (list) list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">⚠ Erreur — vérifie le Apps Script</div>';
+  }
+}
+
+function renderPertes() {
+  const now = new Date(); now.setHours(0,0,0,0);
+  const filtered = pertesData.filter(h => {
+    if (!h.date) return true;
+    const d = new Date(h.date + 'T00:00:00');
+    if (pertesFilter === 'today')   return d.getTime() === now.getTime();
+    if (pertesFilter === 'semaine') { const w = new Date(now); w.setDate(now.getDate()-7);  return d >= w; }
+    if (pertesFilter === 'mois')    { const m = new Date(now); m.setDate(now.getDate()-30); return d >= m; }
+    return true;
+  }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  // Stats
+  const statsEl = document.getElementById('pertes-stats');
+  const totalQty = filtered.reduce((acc, h) => acc + (parseInt(h.quantity) || 1), 0);
+  const noms     = new Set(filtered.map(h => h.name));
+  if (statsEl) statsEl.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+      <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--red)">${totalQty}</div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px">Unités perdues</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+      <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:900;color:var(--text)">${noms.size}</div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px">Produits distincts</div>
+    </div>`;
+
+  const list = document.getElementById('pertes-list');
+  if (!list) return;
+  if (!filtered.length) {
+    list.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--muted)">
+      <div style="font-size:36px;margin-bottom:12px">📉</div>
+      <div style="font-family:'Fraunces',serif;font-size:18px;margin-bottom:6px">Aucune perte enregistrée</div>
+      <div style="font-size:12px">Scanne ou recherche un produit pour commencer.</div>
+    </div>`;
+    return;
+  }
+  // Grouper par date
+  const byDate = {};
+  filtered.forEach(h => { const k = h.date || 'Inconnu'; if (!byDate[k]) byDate[k] = []; byDate[k].push(h); });
+  let html = '';
+  for (const [dateKey, items] of Object.entries(byDate)) {
+    const label  = dateKey === 'Inconnu' ? 'Date inconnue' : fmtDate(dateKey);
+    const dayQty = items.reduce((a, h) => a + (parseInt(h.quantity) || 1), 0);
+    html += `<div class="histo-section-title">${label}
+      <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:1px 8px;font-size:10px">${dayQty} unité${dayQty>1?'s':''}</span>
+    </div>`;
+    html += items.map(h => {
+      const qty = parseInt(h.quantity) || 1;
+      return `<div style="background:var(--red-bg);border:1px solid rgba(255,64,64,.25);border-radius:10px;padding:12px 14px;margin-bottom:6px;display:flex;align-items:center;gap:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h.name || ''}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${h.brand || ''}${h.barcode ? ' · ' + h.barcode : ''}</div>
+        </div>
+        <div style="flex-shrink:0;text-align:center;min-width:42px">
+          <div style="font-family:'Fraunces',serif;font-size:22px;font-weight:900;color:var(--red);line-height:1">${qty}</div>
+          <div style="font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase">unité${qty>1?'s':''}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  list.innerHTML = html;
+}
+
+// ── v2.10 : Morning Mode supprimé (remplacé par Contrôle Rapide) ──
+
 // ── Init ──
 render();
 preloadZXing();
 setTimeout(fullSync, 500);
 </script>
+
+<!-- v2.9 : Tab Bar -->
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="dlc" onclick="switchTab('dlc')">
+    <span class="tab-icon">📦</span>Suivi DLC
+  </button>
+  <button class="tab-btn" data-tab="produits" onclick="switchTab('produits')">
+    <span class="tab-icon">📋</span>Produits
+  </button>
+  <button class="tab-btn" data-tab="pertes" onclick="switchTab('pertes')">
+    <span class="tab-icon">📉</span>Pertes
+  </button>
+</div>
+
+
 </body>
 </html>
